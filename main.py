@@ -11,6 +11,7 @@ import cv2
 import pickle
 import math
 import numpy as np
+import pandas as pd
 import logging
 from datetime import datetime
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -21,9 +22,7 @@ import tensorflow_probability as tfp
 tfd = tfp.distributions
 layers = tf.keras.layers
 
-
 from parameters import*
-
 
 print()
 
@@ -63,8 +62,6 @@ class ClientConnection:
 
 
 
-
-
 class CarlaEnvironment():
 
     def __init__(self, client, world, town, checkpoint_frequency=100, continuous_action=True) -> None:
@@ -75,7 +72,7 @@ class CarlaEnvironment():
         self.blueprint_library = self.world.get_blueprint_library()
         self.map = self.world.get_map()
         self.action_space = self.get_discrete_action_space()
-        self.continous_action_space = continuous_action
+        self.continous_action_space = True
         self.display_on = VISUAL_DISPLAY
         self.vehicle = None
         self.settings = None
@@ -107,6 +104,7 @@ class CarlaEnvironment():
                 self.client.apply_batch([carla.command.DestroyActor(x) for x in self.actor_list])
                 self.sensor_list.clear()
                 self.actor_list.clear()
+            
             self.remove_sensors()
 
 
@@ -167,27 +165,28 @@ class CarlaEnvironment():
                 #print("fresh start")
 
                 self.current_waypoint_index = 0
-                # Waypoint nearby angle and distance from it
                 self.route_waypoints = list()
                 self.waypoint = self.map.get_waypoint(self.vehicle.get_location(), project_to_road=True, lane_type=(carla.LaneType.Driving))
                 current_waypoint = self.waypoint
                 self.route_waypoints.append(current_waypoint)
 
                 for x in range(self.total_distance):
-                #for x in range(1000):
                     if self.town == "Town07":
                         if x < 650:
                             next_waypoint = current_waypoint.next(1.0)[0]
                         else:
                             next_waypoint = current_waypoint.next(1.0)[-1]
                     elif self.town == "Town02": #200
-                        if x < 200:
+                        # if x < 200:
+                        #     next_waypoint = current_waypoint.next(1.0)[-1]
+                        # else:
+                        #     next_waypoint = current_waypoint.next(1.0)[0]
+                        if x > 100:
                             next_waypoint = current_waypoint.next(1.0)[-1]
                         else:
                             next_waypoint = current_waypoint.next(1.0)[0]
+                        
 
-                        #print(f"x={x} next_waypoint = {next_waypoint}")
-                       
                     else:
                         if x < 300:
                             next_waypoint = current_waypoint.next(1.0)[-1]
@@ -207,9 +206,8 @@ class CarlaEnvironment():
                 self.vehicle.set_transform(transform)
                 self.current_waypoint_index = self.checkpoint_waypoint_index
 
-            self.navigation_obs = np.array([self.throttle, self.velocity, self.previous_steer, self.distance_from_center, self.angle])
 
-                        
+            self.navigation_obs = np.array([self.throttle, self.velocity, self.previous_steer, self.distance_from_center, self.angle])                        
             time.sleep(0.5)
             self.collision_history.clear()
 
@@ -233,51 +231,35 @@ class CarlaEnvironment():
             self.timesteps+=1
             self.fresh_start = False
 
-            # Velocity of the vehicle
+ 
             velocity = self.vehicle.get_velocity()
             self.velocity = np.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2) * 3.6
             
-            # Action fron action space for contolling the vehicle with a discrete action
+     
             if self.continous_action_space:
                 steer = float(action_idx[0])
                 steer = max(min(steer, 1.0), -1.0)
                 throttle = float((action_idx[1] + 1.0)/2)
-                throttle = max(min(throttle, 1.0), 0.0)
-                #print(f'steer = {self.previous_steer*0.9 + steer*0.1},throttle = {self.throttle*0.9 + throttle*0.1}')
+                throttle = max(min(throttle, 1.0), 0.0) 
+                #throttle = max(min(throttle, 1.0), 0.0)
                 self.vehicle.apply_control(carla.VehicleControl(steer=self.previous_steer*0.9 + steer*0.1, throttle=self.throttle*0.9 + throttle*0.1))
                 self.previous_steer = steer
                 self.throttle = throttle
-                #v = self.vehicle.get_velocity()
-                #print(f'velocity = {np.sqrt(v.x**2 + v.y**2 + v.z**2) * 3.6}')
-            else:
-                steer = self.action_space[action_idx]
-                if self.velocity < 20.0:
-                    self.vehicle.apply_control(carla.VehicleControl(steer=self.previous_steer*0.9 + steer*0.1, throttle=1.0))
-                else:
-                    self.vehicle.apply_control(carla.VehicleControl(steer=self.previous_steer*0.9 + steer*0.1))
-                self.previous_steer = steer
-                self.throttle = 1.0
+
             
-            # Traffic Light state
+
             if self.vehicle.is_at_traffic_light():
                 traffic_light = self.vehicle.get_traffic_light()
                 if traffic_light.get_state() == carla.TrafficLightState.Red:
                     traffic_light.set_state(carla.TrafficLightState.Green)
 
+
             self.collision_history = self.collision_obj.collision_data            
-
-            # Rotation of the vehicle in correlation to the map/lane
             self.rotation = self.vehicle.get_transform().rotation.yaw
-
-            # Location of the car
             self.location = self.vehicle.get_location()
 
-
-            #transform = self.vehicle.get_transform()
-            # Keep track of closest waypoint on the route
             waypoint_index = self.current_waypoint_index
             for _ in range(len(self.route_waypoints)):
-                # Check if we passed the next waypoint along the route
                 next_waypoint_index = waypoint_index + 1
                 wp = self.route_waypoints[next_waypoint_index % len(self.route_waypoints)]
                 dot = np.dot(self.vector(wp.transform.get_forward_vector())[:2],self.vector(self.location - wp.transform.location)[:2])
@@ -287,14 +269,13 @@ class CarlaEnvironment():
                     break
 
             self.current_waypoint_index = waypoint_index
-            # Calculate deviation from center of the lane
             self.current_waypoint = self.route_waypoints[ self.current_waypoint_index    % len(self.route_waypoints)]
             self.next_waypoint = self.route_waypoints[(self.current_waypoint_index+1) % len(self.route_waypoints)]
 
             self.distance_from_center = self.distance_to_line(self.vector(self.current_waypoint.transform.location),self.vector(self.next_waypoint.transform.location),self.vector(self.location))
             self.center_lane_deviation += self.distance_from_center
 
-            # Get angle difference between closest waypoint and vehicle forward vector
+           
             fwd    = self.vector(self.vehicle.get_velocity())
             wp_fwd = self.vector(self.current_waypoint.transform.rotation.get_forward_vector())
             self.angle  = self.angle_diff(fwd, wp_fwd)
@@ -302,11 +283,9 @@ class CarlaEnvironment():
             #Update checkpoint for training
             # if not self.fresh_start:
             #     if self.checkpoint_frequency is not None:
-            #         #print("ok_0")
             #         self.checkpoint_waypoint_index = (self.current_waypoint_index // self.checkpoint_frequency) * self.checkpoint_frequency
 
             
-            # Rewards are given below!
             done = False
             reward = 0
 
@@ -327,28 +306,24 @@ class CarlaEnvironment():
                 reward = -10
                 done = True
 
-            # Interpolated from 1 when centered to 0 when 3 m from center
+
             centering_factor = max(1.0 - self.distance_from_center / self.max_distance_from_center, 0.0)
-            # Interpolated from 1 when aligned with the road to 0 when +/- 30 degress of road
             angle_factor = max(1.0 - abs(self.angle / np.deg2rad(20)), 0.0)
 
             if not done:
                 if self.continous_action_space:
                     if self.velocity < self.min_speed:
-                        #print('less velocity')
                         reward = (self.velocity / self.min_speed) * centering_factor * angle_factor    
-                    elif self.velocity > self.target_speed:
-                        #print('more velocity')               
+                    elif self.velocity > self.target_speed:           
                         reward = (1.0 - (self.velocity-self.target_speed) / (self.max_speed-self.target_speed)) * centering_factor * angle_factor  
-                    else:                       
-                        #print('normal')                  
+                    else:                                       
                         reward = 1.0 * centering_factor * angle_factor 
                 else:
                     reward = 1.0 * centering_factor * angle_factor
 
             if self.timesteps >= 2e6:
-                #print("ok_1")
-                done = True
+          
+               done = True
             elif self.current_waypoint_index >= len(self.route_waypoints) - 2:
                 print("Reached destination -- Repeat")
                 done = True
@@ -356,11 +331,9 @@ class CarlaEnvironment():
                 if self.checkpoint_frequency is not None:
                     if self.checkpoint_frequency < self.total_distance//2:
                         self.checkpoint_frequency += 2
-                        #print("ok_3")
                     else:
                         self.checkpoint_frequency = None
                         self.checkpoint_waypoint_index = 0
-                        #print("ok_4")
 
 
 
@@ -373,8 +346,9 @@ class CarlaEnvironment():
             normalized_angle = abs(self.angle / np.deg2rad(20))
             self.navigation_obs = np.array([self.throttle, self.velocity, normalized_velocity, normalized_distance_from_center, normalized_angle])
             
-            # Remove everything that has been spawned in the env
+
             if done:
+
                 self.center_lane_deviation = self.center_lane_deviation / self.timesteps
                 self.distance_covered = abs(self.current_waypoint_index - self.checkpoint_waypoint_index)
                 
@@ -398,6 +372,7 @@ class CarlaEnvironment():
             self.remove_sensors()
             if self.display_on:
                 pygame.quit()
+
 
     def create_pedestrians(self):
         try:
@@ -532,6 +507,8 @@ class CarlaEnvironment():
         self.collision_history = None
         self.wrong_maneuver = None
 
+
+
 class CameraSensor():
 
     def __init__(self, vehicle):
@@ -634,16 +611,13 @@ class CollisionSensor:
         self.collision_data.append(intensity)
 
 
-
-
-
 class EncodeState:
     def __init__(self):
         self.model_path = os.path.join(VAR_AUTO_MODEL_PATH,'var_auto_encoder_model') 
         self.model = tf.keras.models.load_model(self.model_path, compile=False)
-        self.model.trainable = False  # Ensure model is in inference mode
+        self.model.trainable = False  
 
-        # Ensure BatchNorm layers do not update statistics
+
         for layer in self.model.layers:
             if isinstance(layer, tf.keras.layers.BatchNormalization):
                 layer.training = False  
@@ -655,7 +629,7 @@ class EncodeState:
     def process(self, observation):
         image_obs = tf.convert_to_tensor(observation[0], dtype=tf.float32)
         image_obs = tf.expand_dims(image_obs, axis=0)  
-        image_obs = self.model(image_obs, training=False)  # Ensure inference mode
+        image_obs = self.model(image_obs, training=False)  
         navigation_obs = tf.convert_to_tensor(observation[1], dtype=tf.float32)
         observation = tf.concat([tf.reshape(image_obs, [-1]), navigation_obs], axis=-1)
 
@@ -690,12 +664,16 @@ class Actor(tf.keras.Model):
         self.action_dim = ACTION_DIM
         self.action_std_init = ACTION_STD_INIT
 
+        # self.dense1 = layers.Dense(500, activation='tanh',kernel_initializer= 'glorot_uniform')
+        # self.dense2 = layers.Dense(300, activation='tanh',kernel_initializer= 'glorot_uniform')
+        # self.dense3 = layers.Dense(100, activation='tanh',kernel_initializer= 'glorot_uniform')
+        # self.output_layer = layers.Dense(self.action_dim, activation='tanh',kernel_initializer= 'glorot_uniform')
+
+        
         self.dense1 = layers.Dense(500, activation='tanh')
         self.dense2 = layers.Dense(300, activation='tanh')
         self.dense3 = layers.Dense(100, activation='tanh')
         self.output_layer = layers.Dense(self.action_dim, activation='tanh')
-
-
 
     def call(self, obs):
 
@@ -710,10 +688,8 @@ class Actor(tf.keras.Model):
         x = self.dense3(x)
         mean = self.output_layer(x)
 
-
         return mean
 
-  
     def normalize(self, obs):
 
         obs = tf.clip_by_value(obs, clip_value_min=-1e8, clip_value_max=1e8)
@@ -728,6 +704,11 @@ class Critic(tf.keras.Model):
     def __init__(self,name = 'CRITIC',**kwargs):
         super().__init__(name = name ,**kwargs)
 
+        # self.dense1 = layers.Dense(500, activation='tanh',kernel_initializer= 'glorot_uniform')
+        # self.dense2 = layers.Dense(300, activation='tanh',kernel_initializer= 'glorot_uniform')
+        # self.dense3 = layers.Dense(100, activation='tanh',kernel_initializer= 'glorot_uniform')
+        # self.output_layer = layers.Dense(1,kernel_initializer= 'glorot_uniform')
+
         self.dense1 = layers.Dense(500, activation='tanh')
         self.dense2 = layers.Dense(300, activation='tanh')
         self.dense3 = layers.Dense(100, activation='tanh')
@@ -739,7 +720,6 @@ class Critic(tf.keras.Model):
         if isinstance(obs, np.ndarray):
             obs = tf.convert_to_tensor(obs, dtype=tf.float32)
 
-        
         obs = self.normalize(obs)
 
         x = self.dense1(obs)
@@ -747,11 +727,7 @@ class Critic(tf.keras.Model):
         x = self.dense3(x)
         value = self.output_layer(x)
 
-
-
         return value
-
-
   
     def normalize(self, obs):
 
@@ -776,6 +752,7 @@ class PPOAgent(tf.keras.Model):
         self.gamma = GAMMA
         self.lam = LAMBDA  
         self.lr = LEARNING_RATE
+        self.batch_size = BATCH_SIZE
         self.n_updates_per_iteration = NO_OF_ITERATIONS
         self.memory = Buffer()
         self.town = TOWN
@@ -785,9 +762,9 @@ class PPOAgent(tf.keras.Model):
         self.models_dir = PPO_MODEL_PATH
         self.checkpoint_dir = CHECKPOINT_PATH
 
+        #self.log_std = tf.Variable(tf.fill((self.action_dim,), self.action_std_init), trainable=False, dtype=tf.float32)
+        self.log_std = tf.Variable(tf.fill((self.action_dim,), self.action_std_init), trainable=True, dtype=tf.float32)
 
-        #self.log_std = tf.Variable(tf.zeros(self.action_dim), trainable=True, dtype=tf.float32)
-        self.log_std = tf.Variable(tf.fill((self.action_dim,), tf.math.log(self.action_std_init)), trainable=False, dtype=tf.float32)
 
         self.actor = Actor()
         self.critic = Critic()
@@ -799,6 +776,7 @@ class PPOAgent(tf.keras.Model):
         self.old_actor.compile(optimizer=self.optimizer)
         self.old_critic.compile(optimizer=self.optimizer)
         
+
         self.update_old_policy()
 
     
@@ -837,10 +815,14 @@ class PPOAgent(tf.keras.Model):
     
 
     def get_action_and_log_prob(self, mean):
+
         std = tf.exp(self.log_std)  
         dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=std)
+
+        #dist  = tfp.distributions.Normal(mean, tf.exp(self.log_std), validate_args=True)
         action = dist.sample()
         log_probs = dist.log_prob(action)
+
         return action, log_probs
 
 
@@ -851,7 +833,10 @@ class PPOAgent(tf.keras.Model):
             delta = rewards[i] + self.gamma * values[i + 1] * (1 - dones[i]) - values[i]
             gae = delta + self.gamma * self.lam * (1 - dones[i]) * gae
             advantages.insert(0, gae)
+
         returns = advantages + values[:-1]
+        #returns = tf.convert_to_tensor(advantages, dtype=tf.float32) + values[:-1]
+
         return tf.convert_to_tensor(advantages, dtype=tf.float32), tf.convert_to_tensor(returns, dtype=tf.float32)
 
 
@@ -863,10 +848,10 @@ class PPOAgent(tf.keras.Model):
             print("NaN detected in the mean, exiting...")
             exit()
 
-        
-        std = tf.exp(self.log_std) 
+        std = tf.exp(self.log_std)  
         dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=std)
 
+        #dist  = tfp.distributions.Normal(mean, tf.exp(self.log_std), validate_args=True)
         log_probs = dist.log_prob(action)
         entropy = dist.entropy()
         values = self.critic(obs)
@@ -875,71 +860,80 @@ class PPOAgent(tf.keras.Model):
 
 
     def learn(self):
+        print()
+        #rewards = self.memory.rewards
+        #dones = self.memory.dones
 
-        rewards = self.memory.rewards
-        dones = self.memory.dones
+        rewards = []
+        discounted_reward = 0
         old_states = tf.squeeze(tf.stack(self.memory.observation, axis=0))
         old_actions = tf.squeeze(tf.stack(self.memory.actions, axis=0))
         old_logprobs = tf.squeeze(tf.stack(self.memory.log_probs, axis=0))
 
-        values = self.critic(old_states)
-        values = tf.squeeze(values)
-        values = tf.concat([values, tf.zeros((1,))], axis=0) 
 
-        advantages, returns = self.compute_advantages(rewards, values, dones)
-        returns = (returns - tf.reduce_mean(returns)) / (tf.math.reduce_std(returns) + 1e-7)
-        advantages = (advantages - tf.reduce_mean(advantages)) / (tf.math.reduce_std(advantages) + 1e-7)
+        for reward, is_terminal in zip(reversed(self.memory.rewards), reversed(self.memory.dones)):
+            if is_terminal:
+                discounted_reward = 0
+            discounted_reward = reward + (self.gamma * discounted_reward)
+            rewards.insert(0, discounted_reward)
 
+        rewards = tf.convert_to_tensor(rewards, dtype=tf.float32)
+        rewards = (rewards - tf.reduce_mean(rewards)) / (tf.math.reduce_std(rewards) + 1e-7)
 
 
         for i in range(self.n_updates_per_iteration):
+            with tf.GradientTape() as tape_a ,tf.GradientTape() as tape_b :
 
-            with tf.GradientTape(persistent=True) as tape:
                 log_probs, values, dist_entropy = self.evaluate(old_states, old_actions)
                 values = tf.squeeze(values)
                 ratios = tf.exp(log_probs - old_logprobs)
-                surr1 = ratios * advantages
-                surr2 = tf.clip_by_value(ratios, 1 - self.clip, 1 + self.clip) * advantages
+                advantages = rewards - values   
+                # surr1 = ratios * advantages
+                # surr2 = tf.clip_by_value(ratios, 1 - self.clip, 1 + self.clip) * advantages
+
+                surr1 = ratios * tf.expand_dims(advantages, axis=-1)
+                surr2 = tf.clip_by_value(ratios, 1 - self.clip, 1 + self.clip) * tf.expand_dims(advantages, axis=-1)
+
+
                 actor_loss = -tf.reduce_mean(tf.minimum(surr1, surr2)) - 0.01 * tf.reduce_mean(dist_entropy)
-                critic_loss =  0.5 * self.loss(values, returns) 
+                critic_loss = 0.5 * self.loss(values, rewards)
 
-            grads_a = tape.gradient(actor_loss, self.actor.trainable_variables)
-            grads_c = tape.gradient(critic_loss, self.critic.trainable_variables)
-            self.optimizer.apply_gradients(zip(grads_a, self.actor.trainable_variables))
-            self.optimizer.apply_gradients(zip(grads_c, self.critic.trainable_variables))
-            
-            #print(f"Entropy Loss: {tf.reduce_mean(dist_entropy).numpy()}")
-            #print(f"Loss: {actor_loss.numpy() , critic_loss.numpy()}")
+                total_loss = actor_loss + critic_loss
 
 
+            actor_vars = self.actor.trainable_variables  + [self.log_std] 
+            critic_vars =  self.critic.trainable_variables
 
+            grads_a = tape_a.gradient(actor_loss , actor_vars)
+            self.optimizer.apply_gradients(zip(grads_a,actor_vars))
+
+            grads_b = tape_b.gradient(critic_loss , critic_vars)
+            self.optimizer.apply_gradients(zip(grads_b,critic_vars))
+
+            print(f" a_Loss = {actor_loss.numpy():.6f} , c_Loss = {critic_loss.numpy():.6f} , Adv: {tf.reduce_mean(advantages).numpy()}")
+
+           
         self.update_old_policy()
         self.memory.clear()
 
+        print(f'log_std = {self.log_std}')
         print("\nUPDATED THE WEIGHTS\n")
+
 
     def save(self):
 
         if not os.path.exists(self.models_dir):
             os.makedirs(self.models_dir)
 
-        #print('... saving models ...')
         self.actor.save(self.models_dir + '/actor')
         self.critic.save(self.models_dir + '/critic')
-       
- 
 
-        # actor_weights = np.concatenate([weight.flatten() for weight in self.actor.get_weights()])
-        # critic_weights = np.concatenate([weight.flatten() for weight in self.critic.get_weights()])
+        log_std_path = os.path.join(self.models_dir, 'log_std.npy')
+        np.save(log_std_path, self.log_std.numpy())
 
-        # print('Actor weights (first 10 values):')
-        # print(actor_weights[:10])
-
-        # print('Critic weights (first 10 values):')
-        # print(critic_weights[:10])
 
         print(f"Model weights are saved at {self.models_dir}")
-        print()
+
 
     def chkpt_save(self,episode,timestep,cumulative_score):
 
@@ -952,45 +946,25 @@ class PPOAgent(tf.keras.Model):
             'episode': episode,
             'timestep': timestep,
             'cumulative_score': cumulative_score,
+            'log_std': self.log_std.numpy()
         }
         with open(checkpoint_file, 'wb') as f:
             pickle.dump(data, f)
 
-        print()
         print(f"Checkpoint saved as {checkpoint_file}")
         print()
 
 
     def load(self):
 
-        #print('... loading models ...')
         self.actor = tf.keras.models.load_model(self.models_dir + '/actor')
         self.critic = tf.keras.models.load_model(self.models_dir + '/critic')
         self.old_actor = tf.keras.models.load_model(self.models_dir + '/actor')
         self.old_critic = tf.keras.models.load_model(self.models_dir + '/critic')
 
-        
-
-        # actor_weights = np.concatenate([weight.flatten() for weight in self.actor.get_weights()])
-        # critic_weights = np.concatenate([weight.flatten() for weight in self.critic.get_weights()])
-
-        # print('Actor weights (first 10 values):')
-        # print(actor_weights[:10])
-
-        # print('Critic weights (first 10 values):')
-        # print(critic_weights[:10])
-
-
-        # actor_weights = np.concatenate([weight.flatten() for weight in self.old_actor.get_weights()])
-        # critic_weights = np.concatenate([weight.flatten() for weight in self.old_critic.get_weights()])
-
-
-        # print('Old Actor weights (first 10 values):')
-        # print(actor_weights[:10])
-
-        # print('Old Critic weights (first 10 values):')
-        # print(critic_weights[:10])
-
+        log_std_path = os.path.join(self.models_dir, 'log_std.npy')
+        if os.path.exists(log_std_path):
+            self.log_std.assign(np.load(log_std_path))
 
         print(f"Model is  loaded from {self.models_dir}")
         print()
@@ -1007,10 +981,15 @@ class PPOAgent(tf.keras.Model):
         timestep = checkpoint_data['timestep']
         cumulative_score = checkpoint_data['cumulative_score']
         
+        if 'log_std' in checkpoint_data:
+            self.log_std.assign(checkpoint_data['log_std'])
+
         print()
-        print(f"Checkpoint loaded from {checkpoint_file}")
-        
+        print(f"Checkpoint loaded from {checkpoint_file} episode : {episode} , log_std = {self.log_std}")
+        #print(f"Checkpoint loaded from {checkpoint_file} episode : {episode}")
+
         return episode, timestep, cumulative_score
+
 
 
 
@@ -1041,6 +1020,11 @@ def train():
         print()
    
 
+    if not os.path.exists(LOG_PATH_TRAIN):
+        os.makedirs(LOG_PATH_TRAIN)
+    
+    summary_writer = tf.summary.create_file_writer(LOG_PATH_TRAIN)
+
     env = CarlaEnvironment(client, world,TOWN)
     encoder = EncodeState()
     
@@ -1057,9 +1041,11 @@ def train():
 
 
 
-    while timestep < TOTAL_TIMESTEPS:
-        #print()
-        #print('training....')
+    while timestep < TRAIN_TIMESTEPS:
+
+        # print()
+        # print('training....')
+        # print()
         observation = env.reset()
         observation = encoder.process(observation)
 
@@ -1068,12 +1054,13 @@ def train():
 
         for t in range(EPISODE_LENGTH): 
 
+
             observation = observation.numpy()
 
             action,_ = agent(observation,True)
-            
-            #print(f'actions are {action}')
 
+            #print(f'action  = {action}')
+            
             observation, reward, done, info = env.step(action)
 
 
@@ -1109,11 +1096,33 @@ def train():
 
         print('Episode: {}'.format(episode),', Timestep: {}'.format(timestep),', Reward:  {:.2f}'.format(current_ep_reward),', Average Reward:  {:.2f}'.format(cumulative_score),', Distance Covered:{}'.format(info[0]))
 
+
+        if episode % 5 == 0:
+
+            with summary_writer.as_default():
+                
+                tf.summary.scalar("Episodic Reward/episode", scores[-1], step=episode)
+                tf.summary.scalar("Cumulative Reward/info", cumulative_score, step=episode)
+                tf.summary.scalar("Cumulative Reward/(t)", cumulative_score, step=timestep)
+                tf.summary.scalar("Average Episodic Reward/info", np.mean(scores[-5:]), step=episode)
+                tf.summary.scalar("Average Reward/(t)", np.mean(scores[-5:]), step=timestep)
+                tf.summary.scalar("Episode Length (s)/info", np.mean(episodic_length), step=episode)
+                tf.summary.scalar("Reward/(t)", current_ep_reward, step=timestep)
+                tf.summary.scalar("Average Deviation from Center/episode", deviation_from_center / 5, step=episode)
+                tf.summary.scalar("Average Deviation from Center/(t)", deviation_from_center / 5, step=timestep)
+                tf.summary.scalar("Average Distance Covered (m)/episode", distance_covered / 5, step=episode)
+                tf.summary.scalar("Average Distance Covered (m)/(t)", distance_covered / 5, step=timestep)
+
+                episodic_length = []
+                deviation_from_center = 0
+                distance_covered = 0
+
+
         if episode % 10 == 0:
             agent.learn()
-            agent.chkpt_save(episode,timestep,cumulative_score)
 
-        if episode % 100 == 0:
+        if episode % 50 == 0:
+            #agent.learn()
             agent.save()
             agent.chkpt_save(episode,timestep,cumulative_score)
  
@@ -1147,30 +1156,132 @@ def test():
         print()
    
 
+    if not os.path.exists(LOG_PATH_TEST):
+        os.makedirs(LOG_PATH_TEST)
+    
+    summary_writer = tf.summary.create_file_writer(LOG_PATH_TEST)
+
+    env = CarlaEnvironment(client, world,TOWN)
+    encoder = EncodeState()
+    
+    agent = PPOAgent()
+    agent.load()
+
+
+    while timestep < TEST_TIMESTEPS:
+
+        print("testing")
+
+        observation = env.reset()
+        observation = encoder.process(observation)
+
+        current_ep_reward = 0
+        t1 = datetime.now()
+
+        for t in range(EPISODE_LENGTH): 
+
+
+            observation = observation.numpy()
+
+            action,_ = agent(observation,False)
+
+            
+            observation, reward, done, info = env.step(action)
+
+
+            if observation is None:
+                break
+
+            observation = encoder.process(observation)
+
+            timestep +=1
+            current_ep_reward += reward
+
+
+            if done:
+                episode += 1
+                t2 = datetime.now()
+                t3 = t2-t1
+                episodic_length.append(abs(t3.total_seconds()))
+                break
+
+        deviation_from_center += info[1]
+        distance_covered += info[0]
+        
+        scores.append(current_ep_reward)
+
+        cumulative_score = np.mean(scores)
+        
+
+        print('Episode: {}'.format(episode),', Timestep: {}'.format(timestep),', Reward:  {:.2f}'.format(current_ep_reward),', Average Reward:  {:.2f}'.format(cumulative_score),', Distance Covered:{}'.format(info[0]))
+
+
+        if episode % 5 == 0:
+
+            with summary_writer.as_default():
+                
+                tf.summary.scalar("Episodic Reward/episode", scores[-1], step=episode)
+                tf.summary.scalar("Cumulative Reward/info", cumulative_score, step=episode)
+                tf.summary.scalar("Cumulative Reward/(t)", cumulative_score, step=timestep)
+                tf.summary.scalar("Average Episodic Reward/info", np.mean(scores[-5:]), step=episode)
+                tf.summary.scalar("Average Reward/(t)", np.mean(scores[-5:]), step=timestep)
+                tf.summary.scalar("Episode Length (s)/info", np.mean(episodic_length), step=episode)
+                tf.summary.scalar("Reward/(t)", current_ep_reward, step=timestep)
+                tf.summary.scalar("Average Deviation from Center/episode", deviation_from_center / 5, step=episode)
+                tf.summary.scalar("Average Deviation from Center/(t)", deviation_from_center / 5, step=timestep)
+                tf.summary.scalar("Average Distance Covered (m)/episode", distance_covered / 5, step=episode)
+                tf.summary.scalar("Average Distance Covered (m)/(t)", distance_covered / 5, step=timestep)
+
+                episodic_length = []
+                deviation_from_center = 0
+                distance_covered = 0
+
+
+    sys.exit()
+
+
+def capture_data():
+
+    timestep = 0
+    episode = 0
+    cumulative_score = 0
+    episodic_length = list()
+    scores = list()
+    deviation_from_center = 0
+    distance_covered = 0
+
+    np.random.seed(SEED)
+    random.seed(SEED)
+    tf.random.set_seed(SEED)
+
+    try:
+        client, world = ClientConnection().setup()
+        logging.info("CONNECTION HAS BEEN STEUP SUCCESSFULLY.")
+        print("CONNECTION HAS BEEN STEUP SUCCESSFULLY.")
+        print()
+    except:
+        logging.error("CONNECTION HAS BEEN REFUSED BY THE SERVER.")
+        ConnectionRefusedError
+        print("CONNECTION HAS BEEN REFUSED BY THE SERVER.")
+        print()
+   
+
     env = CarlaEnvironment(client, world,TOWN)
     encoder = EncodeState()
 
     agent = PPOAgent()
     agent.load()
 
-
-    print("testing..")
-
     folder_count = 1
 
-    while timestep < TEST_TIMESTEPS:
-
-        #save_dir = f"captured_images/Episode_images_{folder_count}"
+    while folder_count < NO_OF_TEST_EPISODES+1:
 
         save_images_dir = os.path.join(TEST_IMAGES,f'Episode_images_{folder_count}')
         
-        # if os.path.exists(save_dir):
-        #     print(f"Folder already exists: {save_dir}")
-        #     break 
-
         if not os.path.exists(save_images_dir):
             os.makedirs(save_images_dir)
 
+        print()
         print(f"saving in {save_images_dir}")
 
         os.makedirs(save_images_dir, exist_ok=True)
@@ -1196,7 +1307,6 @@ def test():
             
             data_to_append = []
 
-            observation = observation.numpy()
 
             image_array = np.array(observation[0], dtype=np.uint8)
             save_path = os.path.join(save_images_dir, f"frame_{frame_count}.png")
@@ -1207,16 +1317,18 @@ def test():
             for x in observation[1]:
                 data_to_append.append(x)
 
+            #########
+
             s_time = time.time()
 
             observation = encoder.process(observation)
-
+            observation = observation.numpy()
             action , mean = agent(observation,True)
+            observation, reward, done, info = env.step(action)
 
             e_time = time.time()
 
-            observation, reward, done, info = env.step(action)
-
+            ########
 
             frame_count +=1
             for x in mean:
@@ -1244,10 +1356,8 @@ def test():
             # break; if the episode is over
             if done:
                 episode += 1
-
                 t2 = datetime.now()
                 t3 = t2-t1
-                
                 episodic_length.append(abs(t3.total_seconds()))
                 break
 
@@ -1258,25 +1368,28 @@ def test():
         cumulative_score = np.mean(scores)
 
         print('Episode: {}'.format(episode),', Timestep: {}'.format(timestep),', Reward:  {:.2f}'.format(current_ep_reward),', Average Reward:  {:.2f}'.format(cumulative_score),', Distance Covered:{}'.format(info[0]))
-        
-
+      
         episodic_length = list()
         deviation_from_center = 0
         distance_covered = 0
         folder_count+=1
 
-        if folder_count>10:
-            break
+
 
     print("start over")    
     print("Terminating the run.")
     sys.exit()
 
 
+
+
 if __name__ == "__main__":
     try:
         train()
         #test()
+        #capture_data()
+
+
     except KeyboardInterrupt:
         sys.exit()
     finally:
