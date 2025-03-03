@@ -117,6 +117,8 @@ class CarlaEnvironment():
             elif self.town == "Town02":
                 transform = self.map.get_spawn_points()[30] #Town2 is 30
                 self.total_distance = 500
+                #self.total_distance = 200
+
             else:
                 transform = self.map.get_spawn_points()[12] #40 nocd 
                 self.total_distance = 500
@@ -281,9 +283,9 @@ class CarlaEnvironment():
             self.angle  = self.angle_diff(fwd, wp_fwd)
 
             #Update checkpoint for training
-            # if not self.fresh_start:
-            #     if self.checkpoint_frequency is not None:
-            #         self.checkpoint_waypoint_index = (self.current_waypoint_index // self.checkpoint_frequency) * self.checkpoint_frequency
+            if not self.fresh_start:
+                if self.checkpoint_frequency is not None:
+                    self.checkpoint_waypoint_index = (self.current_waypoint_index // self.checkpoint_frequency) * self.checkpoint_frequency
 
             
             done = False
@@ -762,8 +764,8 @@ class PPOAgent(tf.keras.Model):
         self.models_dir = PPO_MODEL_PATH
         self.checkpoint_dir = CHECKPOINT_PATH
 
-        #self.log_std = tf.Variable(tf.fill((self.action_dim,), self.action_std_init), trainable=False, dtype=tf.float32)
-        self.log_std = tf.Variable(tf.fill((self.action_dim,), self.action_std_init), trainable=True, dtype=tf.float32)
+        self.log_std = tf.Variable(tf.fill((self.action_dim,), self.action_std_init), trainable=False, dtype=tf.float32)
+        #self.log_std = tf.Variable(tf.fill((self.action_dim,), tf.math.log(self.action_std_init)), trainable=False, dtype=tf.float32)
 
 
         self.actor = Actor()
@@ -817,7 +819,8 @@ class PPOAgent(tf.keras.Model):
     def get_action_and_log_prob(self, mean):
 
         std = tf.exp(self.log_std)  
-        dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=std)
+        #dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=std)
+        dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=self.log_std)
 
         #dist  = tfp.distributions.Normal(mean, tf.exp(self.log_std), validate_args=True)
         action = dist.sample()
@@ -849,7 +852,8 @@ class PPOAgent(tf.keras.Model):
             exit()
 
         std = tf.exp(self.log_std)  
-        dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=std)
+        #dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=std)
+        dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=self.log_std)
 
         #dist  = tfp.distributions.Normal(mean, tf.exp(self.log_std), validate_args=True)
         log_probs = dist.log_prob(action)
@@ -861,63 +865,53 @@ class PPOAgent(tf.keras.Model):
 
     def learn(self):
         print()
-        #rewards = self.memory.rewards
-        #dones = self.memory.dones
-
-        rewards = []
-        discounted_reward = 0
+        rewards = self.memory.rewards
+        dones = self.memory.dones
         old_states = tf.squeeze(tf.stack(self.memory.observation, axis=0))
         old_actions = tf.squeeze(tf.stack(self.memory.actions, axis=0))
         old_logprobs = tf.squeeze(tf.stack(self.memory.log_probs, axis=0))
 
+        values = self.critic(old_states)
+        values = tf.squeeze(values)
+        values = tf.concat([values, tf.zeros((1,))], axis=0)
 
-        for reward, is_terminal in zip(reversed(self.memory.rewards), reversed(self.memory.dones)):
-            if is_terminal:
-                discounted_reward = 0
-            discounted_reward = reward + (self.gamma * discounted_reward)
-            rewards.insert(0, discounted_reward)
-
-        rewards = tf.convert_to_tensor(rewards, dtype=tf.float32)
-        rewards = (rewards - tf.reduce_mean(rewards)) / (tf.math.reduce_std(rewards) + 1e-7)
-
+        advantages, returns = self.compute_advantages(rewards, values, dones)
+        advantages = (advantages - tf.reduce_mean(advantages)) / (tf.math.reduce_std(advantages) + 1e-7)
+        returns = (returns - tf.reduce_mean(returns))/(tf.math.reduce_std(returns)+1e-7)
+        # tf.keras.layers.LayerNormalization()(advantages)
+        # tf.keras.layers.LayerNormalization()(returns)
 
         for i in range(self.n_updates_per_iteration):
-            with tf.GradientTape() as tape_a ,tf.GradientTape() as tape_b :
+            with tf.GradientTape() as tape_a, tf.GradientTape() as tape_c:
 
                 log_probs, values, dist_entropy = self.evaluate(old_states, old_actions)
                 values = tf.squeeze(values)
+                #ratios = tf.exp(tf.clip_by_value(log_probs - old_logprobs, -10, 10))
                 ratios = tf.exp(log_probs - old_logprobs)
-                advantages = rewards - values   
-                # surr1 = ratios * advantages
-                # surr2 = tf.clip_by_value(ratios, 1 - self.clip, 1 + self.clip) * advantages
 
-                surr1 = ratios * tf.expand_dims(advantages, axis=-1)
-                surr2 = tf.clip_by_value(ratios, 1 - self.clip, 1 + self.clip) * tf.expand_dims(advantages, axis=-1)
-
+                surr1 = ratios * advantages
+                surr2 = tf.clip_by_value(ratios, 1 - self.clip, 1 + self.clip) * advantages
 
                 actor_loss = -tf.reduce_mean(tf.minimum(surr1, surr2)) - 0.01 * tf.reduce_mean(dist_entropy)
-                critic_loss = 0.5 * self.loss(values, rewards)
-
-                total_loss = actor_loss + critic_loss
+                critic_loss = 0.5 * self.loss(values, returns)
 
 
-            actor_vars = self.actor.trainable_variables  + [self.log_std] 
-            critic_vars =  self.critic.trainable_variables
+            actor_vars = self.actor.trainable_variables #+ [self.log_std]  
+            grads_a = tape_a.gradient(actor_loss, actor_vars)
+            grads_c = tape_c.gradient(critic_loss, self.critic.trainable_variables)
 
-            grads_a = tape_a.gradient(actor_loss , actor_vars)
-            self.optimizer.apply_gradients(zip(grads_a,actor_vars))
 
-            grads_b = tape_b.gradient(critic_loss , critic_vars)
-            self.optimizer.apply_gradients(zip(grads_b,critic_vars))
+            self.optimizer.apply_gradients(zip(grads_a, actor_vars))
+            self.optimizer.apply_gradients(zip(grads_c, self.critic.trainable_variables))
 
-            print(f" a_Loss = {actor_loss.numpy():.6f} , c_Loss = {critic_loss.numpy():.6f} , Adv: {tf.reduce_mean(advantages).numpy()}")
+            #print(f" A_Loss = {actor_loss.numpy():.6f}, C_Loss = {critic_loss.numpy():.6f},Entropy: {tf.reduce_mean(dist_entropy).numpy():.6f},Adv: {tf.reduce_mean(advantages).numpy()}")
 
-           
+
         self.update_old_policy()
         self.memory.clear()
 
-        print(f'log_std = {self.log_std}')
         print("\nUPDATED THE WEIGHTS\n")
+
 
 
     def save(self):

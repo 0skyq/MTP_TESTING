@@ -240,7 +240,8 @@ class CarlaEnvironment():
                 steer = float(action_idx[0])
                 steer = max(min(steer, 1.0), -1.0)
                 throttle = float((action_idx[1] + 1.0)/2)
-                throttle = max(min(throttle, 1.0), 0.0)
+                throttle = max(min(throttle, 1.0), 0.0) 
+                #throttle = max(min(throttle, 1.0), 0.0)
                 self.vehicle.apply_control(carla.VehicleControl(steer=self.previous_steer*0.9 + steer*0.1, throttle=self.throttle*0.9 + throttle*0.1))
                 self.previous_steer = steer
                 self.throttle = throttle
@@ -610,9 +611,6 @@ class CollisionSensor:
         self.collision_data.append(intensity)
 
 
-
-
-
 class EncodeState:
     def __init__(self):
         self.model_path = os.path.join(VAR_AUTO_MODEL_PATH,'var_auto_encoder_model') 
@@ -666,11 +664,16 @@ class Actor(tf.keras.Model):
         self.action_dim = ACTION_DIM
         self.action_std_init = ACTION_STD_INIT
 
+        # self.dense1 = layers.Dense(500, activation='tanh',kernel_initializer= 'glorot_uniform')
+        # self.dense2 = layers.Dense(300, activation='tanh',kernel_initializer= 'glorot_uniform')
+        # self.dense3 = layers.Dense(100, activation='tanh',kernel_initializer= 'glorot_uniform')
+        # self.output_layer = layers.Dense(self.action_dim, activation='tanh',kernel_initializer= 'glorot_uniform')
+
+        
         self.dense1 = layers.Dense(500, activation='tanh')
         self.dense2 = layers.Dense(300, activation='tanh')
         self.dense3 = layers.Dense(100, activation='tanh')
         self.output_layer = layers.Dense(self.action_dim, activation='tanh')
-
 
     def call(self, obs):
 
@@ -700,6 +703,11 @@ class Critic(tf.keras.Model):
 
     def __init__(self,name = 'CRITIC',**kwargs):
         super().__init__(name = name ,**kwargs)
+
+        # self.dense1 = layers.Dense(500, activation='tanh',kernel_initializer= 'glorot_uniform')
+        # self.dense2 = layers.Dense(300, activation='tanh',kernel_initializer= 'glorot_uniform')
+        # self.dense3 = layers.Dense(100, activation='tanh',kernel_initializer= 'glorot_uniform')
+        # self.output_layer = layers.Dense(1,kernel_initializer= 'glorot_uniform')
 
         self.dense1 = layers.Dense(500, activation='tanh')
         self.dense2 = layers.Dense(300, activation='tanh')
@@ -755,18 +763,20 @@ class PPOAgent(tf.keras.Model):
         self.checkpoint_dir = CHECKPOINT_PATH
 
         self.log_std = tf.Variable(tf.fill((self.action_dim,), self.action_std_init), trainable=False, dtype=tf.float32)
-        #self.log_std = tf.fill((self.action_dim,), tf.math.log(self.action_std_init))
+        #self.log_std = tf.Variable(tf.fill((self.action_dim,), tf.math.log(self.action_std_init)), trainable=False, dtype=tf.float32)
+
 
         self.actor = Actor()
         self.critic = Critic()
         self.old_actor = Actor()
         self.old_critic = Critic()
 
-        self.actor.compile(optimizer=self.optimizer)
-        self.critic.compile(optimizer=self.optimizer)
-        self.old_actor.compile(optimizer=self.optimizer)
-        self.old_critic.compile(optimizer=self.optimizer)
+        # self.actor.compile(optimizer=self.optimizer)
+        # self.critic.compile(optimizer=self.optimizer)
+        # self.old_actor.compile(optimizer=self.optimizer)
+        # self.old_critic.compile(optimizer=self.optimizer)
         
+
         self.update_old_policy()
 
     
@@ -806,12 +816,14 @@ class PPOAgent(tf.keras.Model):
 
     def get_action_and_log_prob(self, mean):
 
-        # std = tf.exp(self.log_std)  
-        # dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=std)
-        dist  = tfp.distributions.Normal(mean, tf.exp(self.log_std), validate_args=True)
+        std = tf.exp(self.log_std)  
+        #dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=std)
+        dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=self.log_std)
+
+        #dist  = tfp.distributions.Normal(mean, tf.exp(self.log_std), validate_args=True)
         action = dist.sample()
         log_probs = dist.log_prob(action)
-        
+
         return action, log_probs
 
 
@@ -822,7 +834,10 @@ class PPOAgent(tf.keras.Model):
             delta = rewards[i] + self.gamma * values[i + 1] * (1 - dones[i]) - values[i]
             gae = delta + self.gamma * self.lam * (1 - dones[i]) * gae
             advantages.insert(0, gae)
+
         returns = advantages + values[:-1]
+        #returns = tf.convert_to_tensor(advantages, dtype=tf.float32) + values[:-1]
+
         return tf.convert_to_tensor(advantages, dtype=tf.float32), tf.convert_to_tensor(returns, dtype=tf.float32)
 
 
@@ -834,11 +849,11 @@ class PPOAgent(tf.keras.Model):
             print("NaN detected in the mean, exiting...")
             exit()
 
-        
-        # std = tf.exp(self.log_std) 
-        # dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=std)
-        dist  = tfp.distributions.Normal(mean, tf.exp(self.log_std), validate_args=True)
+        std = tf.exp(self.log_std)  
+        #dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=std)
+        dist = tfd.MultivariateNormalDiag(loc=mean, scale_diag=self.log_std)
 
+        #dist  = tfp.distributions.Normal(mean, tf.exp(self.log_std), validate_args=True)
         log_probs = dist.log_prob(action)
         entropy = dist.entropy()
         values = self.critic(obs)
@@ -878,8 +893,7 @@ class PPOAgent(tf.keras.Model):
                 critic_loss = 0.5 * self.loss(values, returns)
 
 
-            #actor_vars = self.actor.trainable_variables + [self.log_std]  
-            actor_vars = self.actor.trainable_variables
+            actor_vars = self.actor.trainable_variables #+ [self.log_std]  
             grads_a = tape_a.gradient(actor_loss, actor_vars)
             grads_c = tape_c.gradient(critic_loss, self.critic.trainable_variables)
 
@@ -905,13 +919,11 @@ class PPOAgent(tf.keras.Model):
         self.actor.save(self.models_dir + '/actor')
         self.critic.save(self.models_dir + '/critic')
 
+        log_std_path = os.path.join(self.models_dir, 'log_std.npy')
+        np.save(log_std_path, self.log_std.numpy())
 
-        # optimizer_weights = self.optimizer.get_weights()
-        # with open(self.models_dir + '/optimizer.pkl', 'wb') as f:
-        #     pickle.dump(optimizer_weights, f)
 
         print(f"Model weights are saved at {self.models_dir}")
-
 
 
     def chkpt_save(self,episode,timestep,cumulative_score):
@@ -925,6 +937,7 @@ class PPOAgent(tf.keras.Model):
             'episode': episode,
             'timestep': timestep,
             'cumulative_score': cumulative_score,
+            'log_std': self.log_std.numpy()
         }
         with open(checkpoint_file, 'wb') as f:
             pickle.dump(data, f)
@@ -940,11 +953,9 @@ class PPOAgent(tf.keras.Model):
         self.old_actor = tf.keras.models.load_model(self.models_dir + '/actor')
         self.old_critic = tf.keras.models.load_model(self.models_dir + '/critic')
 
-        # optimizer_path = self.models_dir + '/optimizer.pkl'
-        # if os.path.exists(optimizer_path):
-        #     with open(optimizer_path, 'rb') as f:
-        #         optimizer_weights = pickle.load(f)
-        #     self.optimizer.set_weights(optimizer_weights)
+        log_std_path = os.path.join(self.models_dir, 'log_std.npy')
+        if os.path.exists(log_std_path):
+            self.log_std.assign(np.load(log_std_path))
 
         print(f"Model is  loaded from {self.models_dir}")
         print()
@@ -961,9 +972,13 @@ class PPOAgent(tf.keras.Model):
         timestep = checkpoint_data['timestep']
         cumulative_score = checkpoint_data['cumulative_score']
         
+        if 'log_std' in checkpoint_data:
+            self.log_std.assign(checkpoint_data['log_std'])
+
         print()
-        print(f"Checkpoint loaded from {checkpoint_file} episode : {episode}")
-        
+        print(f"Checkpoint loaded from {checkpoint_file} episode : {episode} , log_std = {self.log_std}")
+        #print(f"Checkpoint loaded from {checkpoint_file} episode : {episode}")
+
         return episode, timestep, cumulative_score
 
 
@@ -1097,8 +1112,8 @@ def train():
         if episode % 10 == 0:
             agent.learn()
 
-
         if episode % 50 == 0:
+            #agent.learn()
             agent.save()
             agent.chkpt_save(episode,timestep,cumulative_score)
  
@@ -1250,7 +1265,7 @@ def capture_data():
 
     folder_count = 1
 
-    while folder_count < NO_OF_TEST_EPISODES:
+    while folder_count < NO_OF_TEST_EPISODES+1:
 
         save_images_dir = os.path.join(TEST_IMAGES,f'Episode_images_{folder_count}')
         
@@ -1358,130 +1373,13 @@ def capture_data():
 
 
 
-def data_processing(episode_id):
-
-    images_folder_path = os.path.join(TEST_IMAGES, f"Episode_images_{episode_id}")
-    csv_file_path = os.path.join(TEST_IMAGES, f"Episode_data_{episode_id}.csv")
-
-    if not os.path.exists(images_folder_path):
-        print(f"Images folder {images_folder_path} not found. Skipping.")
-        sys.exit()
-    if not os.path.exists(csv_file_path):
-        print(f"CSV file {csv_file_path} not found. Skipping.")
-        sys.exit()
-
-    data = pd.read_csv(csv_file_path)
-
-    observation = []
-    cal_mean = []
-    cal_reward = []
-    gpu_time = []
-
-    for index, row in data.iterrows():
-
-        image_name = f"{row['sr.no']}.png"  
-        image_path = os.path.join(images_folder_path, image_name)
-
-        if not os.path.exists(image_path):
-            print(f"Image {image_name} not found in {images_folder_path}. Skipping.")
-            continue
-
-        image = cv2.imread(image_path)
-
-        if image is None:
-            print(f"Failed to load image {image_name}. Skipping.")
-            continue
-
-
-        navgation_data = [row['throttle'],row['velocity'],row['norm_velocity'],row['nor_dis_center'],row['nor_angle']]
-
-        cal_mean.append([row['mean[0]'],row['mean[1]']])     
-        cal_reward.append(row['reward'])   
-        gpu_time.append(row['exe_time'])
-
-        observation.append([image,navgation_data])
-
-
-    return observation,cal_mean,cal_reward,gpu_time
-    
-
-
-def accuracy_check():
-
-    np.random.seed(SEED)
-    random.seed(SEED)
-    tf.random.set_seed(SEED)
-
-
-    encoder = EncodeState()
-    
-    agent = PPOAgent()
-    agent.load()
-
-    for epiosde_id in range(1,NO_OF_TEST_EPISODES):
-
-        print(f"EPISODE : {epiosde_id}")
-
-        obs,cal_mean,cal_reward,gpu_time = data_processing(epiosde_id)
-
-        print(len(obs))
-
-        pred_mean = []
-        pred_reward = []
-        cpu_time = []
-
-        for row in obs:
-
-            s_time = time.time()
-
-            obs_1 = encoder.process(row)
-            _ , mean = agent(obs_1,train = False)
-
-            e_time = time.time()
-
-            pred_mean.append([mean[0],mean[1]])
-
-            cpu_time.append(e_time-s_time)
-
-
-        loss = np.mean((np.array(pred_mean) - np.array(cal_mean)) ** 2)
-        rsme = math.sqrt(loss)
-
-        print(f"gpu time {np.array(np.mean(gpu_time))}")
-        print(f"cpu_time {np.array(np.mean(cpu_time))}")
-
-        print(f"MSE is {loss}")
-        print(f"RSME is {rsme}")
-
-
-        save_csv_dir = os.path.join(RESULTS_PATH,f'accuracy_check.csv')
-
-        gpu_time = np.mean(gpu_time)
-        cpu_time = np.mean(cpu_time)
-        MSE = loss
-        RMSE = rsme
-
-        data_to_append = [f"Episode_{epiosde_id}", gpu_time, cpu_time, MSE, RMSE]
-
-        with open(save_csv_dir, mode='a', newline='') as file:
-            writer = csv.writer(file)
-
-            if file.tell() == 0:
-                writer.writerow(["Episode", "GPU Time", "CPU Time", "MSE", "RMSE"])
-            
-            writer.writerow(data_to_append)
-
-        print(f"Data saved to {save_csv_dir}")
-
-
-
 
 if __name__ == "__main__":
     try:
         train()
         #test()
         #capture_data()
-        #accuracy_check()
+
 
     except KeyboardInterrupt:
         sys.exit()

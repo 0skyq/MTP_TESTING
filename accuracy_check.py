@@ -245,11 +245,17 @@ def accuracy_check_16bit():
     encoder_output_details = encoder.get_output_details()
 
     agent = tf.lite.Interpreter(model_path=TF_LITE_PATH + "/actor_fp16.tflite")
+
+
+
     agent.allocate_tensors()
 
     agent_input_details = agent.get_input_details()
     agent_output_details = agent.get_output_details()
 
+    print(f'Lite models loaded from {TF_LITE_PATH}')
+    print(encoder_input_details[0]['dtype'])  
+    print(agent_input_details[0]['dtype'])  
 
 
     for epiosde_id in range(1,NO_OF_TEST_EPISODES):
