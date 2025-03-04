@@ -80,12 +80,6 @@ class Actor(tf.keras.Model):
         self.action_dim = ACTION_DIM
         self.action_std_init = ACTION_STD_INIT
 
-        # self.dense1 = layers.Dense(500, activation='tanh',kernel_initializer= 'glorot_uniform')
-        # self.dense2 = layers.Dense(300, activation='tanh',kernel_initializer= 'glorot_uniform')
-        # self.dense3 = layers.Dense(100, activation='tanh',kernel_initializer= 'glorot_uniform')
-        # self.output_layer = layers.Dense(self.action_dim, activation='tanh',kernel_initializer= 'glorot_uniform')
-
-        
         self.dense1 = layers.Dense(500, activation='tanh')
         self.dense2 = layers.Dense(300, activation='tanh')
         self.dense3 = layers.Dense(100, activation='tanh')
@@ -119,11 +113,6 @@ class Critic(tf.keras.Model):
 
     def __init__(self,name = 'CRITIC',**kwargs):
         super().__init__(name = name ,**kwargs)
-
-        # self.dense1 = layers.Dense(500, activation='tanh',kernel_initializer= 'glorot_uniform')
-        # self.dense2 = layers.Dense(300, activation='tanh',kernel_initializer= 'glorot_uniform')
-        # self.dense3 = layers.Dense(100, activation='tanh',kernel_initializer= 'glorot_uniform')
-        # self.output_layer = layers.Dense(1,kernel_initializer= 'glorot_uniform')
 
         self.dense1 = layers.Dense(500, activation='tanh')
         self.dense2 = layers.Dense(300, activation='tanh')
@@ -441,9 +430,7 @@ def run():
             conn, addr = server_socket.accept()
             print(f"Connected by {addr}")
     
-
             while True:
-
 
                 data = receive_all(conn, 153620)
 

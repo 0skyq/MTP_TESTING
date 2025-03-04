@@ -17,9 +17,7 @@ import pandas as pd
 import logging
 from datetime import datetime
 import tensorflow as tf
-import tensorflow_probability as tfp
-tfd = tfp.distributions
-layers = tf.keras.layers
+
 from parameters import*
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
@@ -623,24 +621,20 @@ def run():
     tf.random.set_seed(SEED)
 
 
-    #tf.config.threading.set_inter_op_parallelism_threads(6) 
-
     try:
         client, world = ClientConnection().setup()
-        #logging.info("CONNECTION HAS BEEN STEUP SUCCESSFULLY.")
         print("CONNECTION HAS BEEN STEUP SUCCESSFULLY.")
         print()
     except:
-        #logging.error("CONNECTION HAS BEEN REFUSED BY THE SERVER.")
         ConnectionRefusedError
         print("CONNECTION HAS BEEN REFUSED BY THE SERVER.")
         print()
    
 
-    if not os.path.exists(LOG_PATH_TEST):
-        os.makedirs(LOG_PATH_TEST)
+    if not os.path.exists(LOG_PATH_PI):
+        os.makedirs(LOG_PATH_PI)
     
-    summary_writer = tf.summary.create_file_writer(LOG_PATH_TEST)
+    summary_writer = tf.summary.create_file_writer(LOG_PATH_PI)
 
     env = CarlaEnvironment(client, world,TOWN)
 
