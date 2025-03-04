@@ -333,7 +333,7 @@ def accuracy_check_16bit():
 
 if __name__ == "__main__":
     try:
-        #accuracy_check_32bit()
+        accuracy_check_32bit()
         accuracy_check_16bit()
 
 
