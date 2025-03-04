@@ -283,9 +283,9 @@ class CarlaEnvironment():
             self.angle  = self.angle_diff(fwd, wp_fwd)
 
             #Update checkpoint for training
-            if not self.fresh_start:
-                if self.checkpoint_frequency is not None:
-                    self.checkpoint_waypoint_index = (self.current_waypoint_index // self.checkpoint_frequency) * self.checkpoint_frequency
+            # if not self.fresh_start:
+            #     if self.checkpoint_frequency is not None:
+            #         self.checkpoint_waypoint_index = (self.current_waypoint_index // self.checkpoint_frequency) * self.checkpoint_frequency
 
             
             done = False
@@ -979,12 +979,15 @@ class PPOAgent(tf.keras.Model):
             self.log_std.assign(checkpoint_data['log_std'])
 
         print()
-        print(f"Checkpoint loaded from {checkpoint_file} episode : {episode} , log_std = {self.log_std}")
-        #print(f"Checkpoint loaded from {checkpoint_file} episode : {episode}")
+        #print(f"Checkpoint loaded from {checkpoint_file} episode : {episode} , log_std = {self.log_std}")
+        print(f"Checkpoint loaded from {checkpoint_file} episode : {episode}")
 
         return episode, timestep, cumulative_score
 
-
+    def prn(self):
+        print()
+        print(f'log_std is = {self.log_std}')
+        print()
 
 
 
@@ -1029,6 +1032,7 @@ def train():
         agent = PPOAgent()
         episode , timestep , cumulative_score = agent.chkpt_load()
         agent.load()
+        agent.prn()
     else:
 
         agent = PPOAgent()
@@ -1124,27 +1128,27 @@ def train():
     sys.exit()
 
 
+
 def test():
 
     timestep = 0
     episode = 0
-    cumulative_score = 0
-    episodic_length = list()
     scores = list()
-    deviation_from_center = 0
-    distance_covered = 0
 
     np.random.seed(SEED)
     random.seed(SEED)
     tf.random.set_seed(SEED)
 
+
+    #tf.config.threading.set_inter_op_parallelism_threads(6) 
+
     try:
         client, world = ClientConnection().setup()
-        logging.info("CONNECTION HAS BEEN STEUP SUCCESSFULLY.")
+        #logging.info("CONNECTION HAS BEEN STEUP SUCCESSFULLY.")
         print("CONNECTION HAS BEEN STEUP SUCCESSFULLY.")
         print()
     except:
-        logging.error("CONNECTION HAS BEEN REFUSED BY THE SERVER.")
+        #logging.error("CONNECTION HAS BEEN REFUSED BY THE SERVER.")
         ConnectionRefusedError
         print("CONNECTION HAS BEEN REFUSED BY THE SERVER.")
         print()
@@ -1160,28 +1164,26 @@ def test():
     
     agent = PPOAgent()
     agent.load()
+    agent.prn()
 
+    print("TESTING.....")
 
-    while timestep < TEST_TIMESTEPS:
-
-        print("testing")
+    while episode < TEST_EPISODES:
 
         observation = env.reset()
         observation = encoder.process(observation)
 
+        total_time = 0
         current_ep_reward = 0
+        deviation_from_center = 0
+        distance_covered = 0
         t1 = datetime.now()
 
         for t in range(EPISODE_LENGTH): 
 
-
             observation = observation.numpy()
-
             action,_ = agent(observation,False)
-
-            
             observation, reward, done, info = env.step(action)
-
 
             if observation is None:
                 break
@@ -1191,44 +1193,35 @@ def test():
             timestep +=1
             current_ep_reward += reward
 
-
             if done:
                 episode += 1
-                t2 = datetime.now()
-                t3 = t2-t1
-                episodic_length.append(abs(t3.total_seconds()))
                 break
+
 
         deviation_from_center += info[1]
         distance_covered += info[0]
-        
-        scores.append(current_ep_reward)
 
+        
+        t2 = datetime.now()
+        total_time = abs((t2-t1).total_seconds())
+        #episodic_length.append(abs(total_time.total_seconds()))
+
+        scores.append(current_ep_reward)
         cumulative_score = np.mean(scores)
         
+        if info[0] > 399:
 
-        print('Episode: {}'.format(episode),', Timestep: {}'.format(timestep),', Reward:  {:.2f}'.format(current_ep_reward),', Average Reward:  {:.2f}'.format(cumulative_score),', Distance Covered:{}'.format(info[0]))
-
-
-        if episode % 5 == 0:
+            print('Episode: {}'.format(episode),', Timetaken: {:.2f}'.format(total_time),', Reward:  {:.2f}'.format(current_ep_reward),', Distance Covered:{}'.format(info[0]))
 
             with summary_writer.as_default():
-                
-                tf.summary.scalar("Episodic Reward/episode", scores[-1], step=episode)
-                tf.summary.scalar("Cumulative Reward/info", cumulative_score, step=episode)
-                tf.summary.scalar("Cumulative Reward/(t)", cumulative_score, step=timestep)
-                tf.summary.scalar("Average Episodic Reward/info", np.mean(scores[-5:]), step=episode)
-                tf.summary.scalar("Average Reward/(t)", np.mean(scores[-5:]), step=timestep)
-                tf.summary.scalar("Episode Length (s)/info", np.mean(episodic_length), step=episode)
-                tf.summary.scalar("Reward/(t)", current_ep_reward, step=timestep)
-                tf.summary.scalar("Average Deviation from Center/episode", deviation_from_center / 5, step=episode)
-                tf.summary.scalar("Average Deviation from Center/(t)", deviation_from_center / 5, step=timestep)
-                tf.summary.scalar("Average Distance Covered (m)/episode", distance_covered / 5, step=episode)
-                tf.summary.scalar("Average Distance Covered (m)/(t)", distance_covered / 5, step=timestep)
 
-                episodic_length = []
-                deviation_from_center = 0
-                distance_covered = 0
+                tf.summary.scalar('Metrics/Time Taken', total_time, step=episode)
+                tf.summary.scalar('Metrics/Reward', current_ep_reward, step=episode)
+                tf.summary.scalar('Metrics/Distance Covered', info[0], step=episode)
+                summary_writer.flush()  
+
+        else:
+            episode-=1
 
 
     sys.exit()
@@ -1378,13 +1371,14 @@ def capture_data():
 
 
 if __name__ == "__main__":
+
     try:
         train()
         #test()
         #capture_data()
 
-
     except KeyboardInterrupt:
         sys.exit()
+        
     finally:
         print("\nTerminating...")
