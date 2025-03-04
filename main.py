@@ -1168,7 +1168,7 @@ def test():
 
     print("TESTING.....")
 
-    while episode < TEST_EPISODES:
+    while episode < TEST_EPISODES+1:
 
         observation = env.reset()
         observation = encoder.process(observation)
