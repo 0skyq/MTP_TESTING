@@ -613,6 +613,18 @@ class CollisionSensor:
         self.collision_data.append(intensity)
 
 
+def data_processing(observation):
+
+    image_array = observation[0].astype(np.uint8)
+    info_array = np.array(observation[1],dtype = np.float32)
+    image_shape = image_array.shape
+    image_bytes = image_array.tobytes()
+    info_bytes = info_array.tobytes()
+
+    data = struct.pack("3I", *image_shape) + image_bytes + info_bytes 
+
+    return data
+
 def run():
     
     timestep = 0
@@ -657,23 +669,16 @@ def run():
     t1 = datetime.now()
 
     observation = env.reset()
-    print(observation[0])
-    print(observation[1])
-    print(observation[0].shape)
-    print(len(observation[1]))
-    image_array = observation[0].astype(np.uint8)
-    info_array = np.array(observation[1],dtype = np.float32)
 
-    image_shape = image_array.shape
-    image_bytes = image_array.tobytes()
-    info_bytes = info_array.tobytes()
-
-
-    data = struct.pack("3I", *image_shape) + image_bytes + info_bytes 
+    data = data_processing(observation)
 
     client_socket.sendall(data)
     print("observation sent")
 
+    d = client_socket.recv(8)
+    action = struct.unpack('2f',d)
+
+    print(action)
 
 
     sys.exit()
