@@ -639,9 +639,9 @@ def run():
     env = CarlaEnvironment(client, world,TOWN)
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((SERVER_IP, SERVER_PORT))
+    server_socket.bind((SIMULATION_IP, PORT))
     server_socket.listen(1)
-    print(f"Server is listening on {SERVER_IP}:{SERVER_PORT}")
+    print(f"Server is listening on {SERVER_IP}:{PORT}")
 
     client_socket, client_address = server_socket.accept()
     print(f"Connection established with {client_address}")
