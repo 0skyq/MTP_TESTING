@@ -6,6 +6,7 @@ import weakref
 import pygame
 import time
 import random
+import struct
 import csv
 import cv2
 import pickle
@@ -31,6 +32,7 @@ try:
         'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
 except IndexError:
     print('Couldn\'t import Carla egg properly')
+
 
 import carla
 
@@ -639,70 +641,39 @@ def run():
     env = CarlaEnvironment(client, world,TOWN)
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((SIMULATION_IP, PORT))
+    server_socket.bind((EDGE_IP, PORT))
     server_socket.listen(1)
-    print(f"Server is listening on {SERVER_IP}:{PORT}")
+    print()
+    print(f"waiting for connection.....")
 
     client_socket, client_address = server_socket.accept()
-    print(f"Connection established with {client_address}")
+    print(f"Connection established with {client_address}:{client_socket}")
 
 
+    total_time = 0
+    current_ep_reward = 0
+    deviation_from_center = 0
+    distance_covered = 0
+    t1 = datetime.now()
 
-    while episode < TEST_EPISODES:
+    observation = env.reset()
+    print(observation[0])
+    print(observation[1])
+    print(observation[0].shape)
+    print(len(observation[1]))
+    image_array = observation[0].astype(np.uint8)
+    info_array = np.array(observation[1],dtype = np.float32)
 
-        total_time = 0
-        current_ep_reward = 0
-        deviation_from_center = 0
-        distance_covered = 0
-        t1 = datetime.now()
-
-        observation = env.reset()
-
-        #send observation..........
-        client_socket.send(pickle.dumps(observation))
-
-
-        for t in range(EPISODE_LENGTH): 
-
-            data = client_socket.recv(BUFFER_SIZE)
-            action = pickle.loads(data)
-
-            observation, reward, done, info = env.step(action)
-
-            if observation is None:
-                break
-
-            #send observation..........
-            client_socket.send(pickle.dumps(observation))
-
-            timestep +=1
-            current_ep_reward += reward
-
-            if done:
-                episode += 1
-                break
+    image_shape = image_array.shape
+    image_bytes = image_array.tobytes()
+    info_bytes = info_array.tobytes()
 
 
-        deviation_from_center += info[1]
-        distance_covered += info[0]
+    data = struct.pack("3I", *image_shape) + image_bytes + info_bytes 
 
-        
-        t2 = datetime.now()
-        total_time = abs((t2-t1).total_seconds())
-        
-        if info[0] > 399:
+    client_socket.sendall(data)
+    print("observation sent")
 
-            print('Episode: {}'.format(episode),', Timetaken: {:.2f}'.format(total_time),', Reward:  {:.2f}'.format(current_ep_reward),', Distance Covered:{}'.format(info[0]))
-
-            with summary_writer.as_default():
-
-                tf.summary.scalar('Metrics/Time Taken', total_time, step=episode)
-                tf.summary.scalar('Metrics/Reward', current_ep_reward, step=episode)
-                tf.summary.scalar('Metrics/Distance Covered', info[0], step=episode)
-                summary_writer.flush()  
-
-        else:
-            episode-=1
 
 
     sys.exit()
