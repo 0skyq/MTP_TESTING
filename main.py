@@ -379,10 +379,7 @@ class CarlaEnvironment():
     def create_pedestrians(self):
         try:
 
-            # Our code for this method has been broken into 3 sections.
 
-            # 1. Getting the available spawn points in  our world.
-            # Random Spawn locations for the walker
             walker_spawn_points = []
             for i in range(NUMBER_OF_PEDESTRIAN):
                 spawn_point_ = carla.Transform()
@@ -1133,22 +1130,19 @@ def test():
 
     timestep = 0
     episode = 0
-    scores = list()
 
     np.random.seed(SEED)
     random.seed(SEED)
     tf.random.set_seed(SEED)
 
 
-    #tf.config.threading.set_inter_op_parallelism_threads(6) 
+    tf.config.threading.set_inter_op_parallelism_threads(10) 
 
     try:
         client, world = ClientConnection().setup()
-        #logging.info("CONNECTION HAS BEEN STEUP SUCCESSFULLY.")
         print("CONNECTION HAS BEEN STEUP SUCCESSFULLY.")
         print()
     except:
-        #logging.error("CONNECTION HAS BEEN REFUSED BY THE SERVER.")
         ConnectionRefusedError
         print("CONNECTION HAS BEEN REFUSED BY THE SERVER.")
         print()
@@ -1204,24 +1198,18 @@ def test():
         
         t2 = datetime.now()
         total_time = abs((t2-t1).total_seconds())
-        #episodic_length.append(abs(total_time.total_seconds()))
 
-        scores.append(current_ep_reward)
-        cumulative_score = np.mean(scores)
         
-        if info[0] > 399:
+        print('Episode: {}'.format(episode),', Timetaken: {:.2f}'.format(total_time),', Reward:  {:.2f}'.format(current_ep_reward),', Distance Covered:{}'.format(info[0]))
 
-            print('Episode: {}'.format(episode),', Timetaken: {:.2f}'.format(total_time),', Reward:  {:.2f}'.format(current_ep_reward),', Distance Covered:{}'.format(info[0]))
+        with summary_writer.as_default():
 
-            with summary_writer.as_default():
+            tf.summary.scalar('Metrics/Time Taken', total_time, step=episode)
+            tf.summary.scalar('Metrics/Reward', current_ep_reward, step=episode)
+            tf.summary.scalar('Metrics/Distance Covered', info[0], step=episode)
+            summary_writer.flush()  
 
-                tf.summary.scalar('Metrics/Time Taken', total_time, step=episode)
-                tf.summary.scalar('Metrics/Reward', current_ep_reward, step=episode)
-                tf.summary.scalar('Metrics/Distance Covered', info[0], step=episode)
-                summary_writer.flush()  
 
-        else:
-            episode-=1
 
 
     sys.exit()
@@ -1373,8 +1361,8 @@ def capture_data():
 if __name__ == "__main__":
 
     try:
-        train()
-        #test()
+        #train()
+        test()
         #capture_data()
 
     except KeyboardInterrupt:
