@@ -627,9 +627,6 @@ def data_processing(observation):
 
 def run():
     
-    timestep = 0
-    episode = 0
-
     np.random.seed(SEED)
     random.seed(SEED)
     tf.random.set_seed(SEED)
@@ -661,24 +658,59 @@ def run():
     client_socket, client_address = server_socket.accept()
     print(f"Connection established with {client_address}:{client_socket}")
 
+    episode = 0
 
-    total_time = 0
-    current_ep_reward = 0
-    deviation_from_center = 0
-    distance_covered = 0
-    t1 = datetime.now()
+    while episode < TEST_EPISODES+1:
 
-    observation = env.reset()
+        total_time = 0
+        current_ep_reward = 0
+        deviation_from_center = 0
+        distance_covered = 0
+        t1 = datetime.now()
 
-    data = data_processing(observation)
+        observation = env.reset()
 
-    client_socket.sendall(data)
-    print("observation sent")
+        data = data_processing(observation)
 
-    d = client_socket.recv(8)
-    action = struct.unpack('2f',d)
+        client_socket.sendall(data)
+        print("observation sent")
 
-    print(action)
+
+        for i in range(EPISODE_LENGTH):
+
+            d = client_socket.recv(8)
+            action = struct.unpack('2f',d)
+
+            print(action)
+
+            observation, reward, done, info = env.step(action)
+
+            data = data_processing(observation)
+
+            client_socket.sendall(data)
+            print("observation sent")
+
+            current_ep_reward += reward
+
+            if done:
+                episode += 1
+                break
+
+        deviation_from_center += info[1]
+        distance_covered += info[0]
+
+        t2 = datetime.now()
+        total_time = abs((t2-t1).total_seconds())
+
+        
+        print('Episode: {}'.format(episode),', Timetaken: {:.2f}'.format(total_time),', Reward:  {:.2f}'.format(current_ep_reward),', Distance Covered:{}'.format(info[0]))
+
+        with summary_writer.as_default():
+
+            tf.summary.scalar('Metrics/Time Taken', total_time, step=episode)
+            tf.summary.scalar('Metrics/Reward', current_ep_reward, step=episode)
+            tf.summary.scalar('Metrics/Distance Covered', info[0], step=episode)
+            summary_writer.flush()
 
 
     sys.exit()
