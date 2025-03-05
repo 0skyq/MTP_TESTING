@@ -37,15 +37,26 @@ VISUAL_DISPLAY = False
 
 
 #PIL 
+<<<<<<< HEAD
+SIMULATION_IP = '192.168.0.148'
+EDGE_IP = '0.0.0.0'
+PORT = 5000
+=======
+BUFFER_SIZE = 524288
+NUM = 3*160*80+5
+
 SIMULATION_IP = '192.168.0.148'
 EDGE_IP = '0.0.0.0'
 PORT = 5000
 
 
+>>>>>>> 8820add3c (pil_edge)
+
+
 
 # PATHS
 VAR_AUTO_MODEL_PATH = 'VAE'
-RESULTS_PATH = 'Results_05'
+RESULTS_PATH = 'Results_04'
 PPO_MODEL_PATH = f'{RESULTS_PATH}/ppo_model'
 VAE_MODEL_PATH = f'{RESULTS_PATH}/vae_model'
 CHECKPOINT_PATH = f'{RESULTS_PATH}/checkpoints'
