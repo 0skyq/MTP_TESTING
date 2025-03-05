@@ -392,29 +392,19 @@ class PPOAgent(tf.keras.Model):
         print()
 
 
-def receive_all(conn, size):
-    """Helper function to receive all 'size' bytes."""
-    data = b''
-    while len(data) < size:
-        chunk = conn.recv(size - len(data))
-        if not chunk:
-            raise Exception("Connection closed or error while receiving data.")
-        data += chunk 
-    return data
-
 
 
 def run():
 
-    # np.random.seed(SEED)
-    # random.seed(SEED)
-    # tf.random.set_seed(SEED)
+    np.random.seed(SEED)
+    random.seed(SEED)
+    tf.random.set_seed(SEED)
 
-    # encoder = EncodeState()
+    encoder = EncodeState()
     
-    # agent = PPOAgent()
-    # agent.load()
-    # agent.prn()
+    agent = PPOAgent()
+    agent.load()
+    agent.prn()
 
     print("TESTING.....")
 
@@ -441,11 +431,16 @@ def run():
 
     observation = [image_array,info_array]
 
-    print(observation[0])
-    print(observation[1])
-    print(observation[0].shape)
-    print(len(observation[1]))
+    observation = encoder.process(observation)
 
+    action,_ = agent(observation,train = False)
+
+    print(action)
+
+    data = struct.pack('2f',*action)
+
+    client_socket.sendall(data)
+    print("action sent")
 
     
     client_socket.close()
