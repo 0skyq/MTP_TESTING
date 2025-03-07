@@ -23,6 +23,15 @@ from parameters import*
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
 
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_socket.bind((EDGE_IP, PORT))
+server_socket.listen(1)
+print()
+print(f"waiting for connection.....")
+
+client_socket, client_address = server_socket.accept()
+print(f"Connection established with {client_address}:{client_socket}")
+
 
 
 try:
@@ -649,14 +658,7 @@ def run():
 
     env = CarlaEnvironment(client, world,TOWN)
 
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((EDGE_IP, PORT))
-    server_socket.listen(1)
-    print()
-    print(f"waiting for connection.....")
 
-    client_socket, client_address = server_socket.accept()
-    print(f"Connection established with {client_address}:{client_socket}")
 
     episode = 0
 
@@ -673,7 +675,7 @@ def run():
         data = data_processing(observation)
 
         client_socket.sendall(data)
-        print("observation sent")
+        #print("observation sent")
 
 
         for i in range(EPISODE_LENGTH):
@@ -681,14 +683,15 @@ def run():
             d = client_socket.recv(8)
             action = struct.unpack('2f',d)
 
-            print(action)
+            #
+            # print(action)
 
             observation, reward, done, info = env.step(action)
 
             data = data_processing(observation)
 
             client_socket.sendall(data)
-            print("observation sent")
+            #print("observation sent")
 
             current_ep_reward += reward
 
