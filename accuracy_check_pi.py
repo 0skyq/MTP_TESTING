@@ -17,6 +17,8 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 tfd = tfp.distributions
 layers = tf.keras.layers
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='tensorflow')
 
 from parameters import*
 
