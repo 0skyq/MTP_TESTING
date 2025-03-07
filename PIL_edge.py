@@ -12,6 +12,7 @@ from parameters import*
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
 
+
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client_socket.connect((SIMULATION_IP,PORT))
 print("Connection Established")
@@ -163,6 +164,7 @@ def run():
     print()
 
 
+
     while True:
 
         image_obs ,info_obs = data_processing()
@@ -174,14 +176,15 @@ def run():
         if observation is None:
             break
 
-        action = agent(observation).numpy().flatten()
+        action = agent(observation)
+        action = np.array(action,dtype = np.float32).flatten()
 
         print(action)
 
         data = struct.pack('2f',*action)
 
         client_socket.sendall(data)
-        print("action sent")
+        #print("action sent")
 
     
     client_socket.close()
