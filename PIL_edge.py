@@ -17,7 +17,6 @@ client_socket.connect((SIMULATION_IP,PORT))
 print("Connection Established")
 
 
-
 @tf.keras.utils.register_keras_serializable()
 class Encoder(tf.keras.Model):
 
@@ -156,7 +155,7 @@ def run():
 
     encoder = tf.keras.models.load_model(VAE_MODEL_PATH+'/var_auto_encoder_model')
 
-    print(f'Variational AutoEncoder Loaded from {VAE_MODEL_PATH}')
+    print(f'Encoder Model is Loaded from {VAE_MODEL_PATH}')
 
     agent = Actor()
     agent = tf.keras.models.load_model(PPO_MODEL_PATH + '/actor')
