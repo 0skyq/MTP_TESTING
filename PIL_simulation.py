@@ -661,7 +661,9 @@ def run():
 
 
     episode = 0
-
+    print()
+    print('TESTING.....')
+    print()
     while episode < TEST_EPISODES+1:
 
         total_time = 0
@@ -669,29 +671,29 @@ def run():
         deviation_from_center = 0
         distance_covered = 0
         t1 = datetime.now()
+        avg_latency = []
 
         observation = env.reset()
+        t3 = datetime.now()
 
         data = data_processing(observation)
 
         client_socket.sendall(data)
-        #print("observation sent")
-
 
         for i in range(EPISODE_LENGTH):
 
             d = client_socket.recv(8)
             action = struct.unpack('2f',d)
+            t4 = datetime.now()
 
-            #
-            # print(action)
+            avg_latency.append(abs((t4-t3).total_seconds()))
 
             observation, reward, done, info = env.step(action)
+            t3 = datetime.now()
 
             data = data_processing(observation)
 
             client_socket.sendall(data)
-            #print("observation sent")
 
             current_ep_reward += reward
 
@@ -706,7 +708,7 @@ def run():
         total_time = abs((t2-t1).total_seconds())
 
         
-        print('Episode: {}'.format(episode),', Timetaken: {:.2f}'.format(total_time),', Reward:  {:.2f}'.format(current_ep_reward),', Distance Covered:{}'.format(info[0]))
+        print('Episode: {}'.format(episode),', Timetaken: {:.2f} sec'.format(total_time),', Reward:  {:.2f}'.format(current_ep_reward),', Distance Covered:{} m '.format(info[0]), ', Avg Latency:{:.2f} msec'.format(np.mean(avg_latency)*1000))
 
         with summary_writer.as_default():
 

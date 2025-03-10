@@ -599,21 +599,29 @@ def run():
     print("TESTING.....")
 
     while episode < TEST_EPISODES+1:
-
-        observation = env.reset()
-        observation = encoder.process(observation)
-
+        
         total_time = 0
         current_ep_reward = 0
         deviation_from_center = 0
         distance_covered = 0
         t1 = datetime.now()
+        avg_latency = []
+
+        observation = env.reset()
+        t3 = datetime.now()
+        observation = encoder.process(observation)
 
         for t in range(EPISODE_LENGTH): 
 
             observation = observation.numpy()
             action = agent(observation).numpy().flatten()
+
+            t4 = datetime.now()
+
+            avg_latency.append(abs((t4-t3).total_seconds()))
+
             observation, reward, done, info = env.step(action)
+            t3 = datetime.now()
 
             if observation is None:
                 break
@@ -636,7 +644,7 @@ def run():
 
 
         
-        print('Episode: {}'.format(episode),', Timetaken: {:.2f}'.format(total_time),', Reward:  {:.2f}'.format(current_ep_reward),', Distance Covered:{}'.format(info[0]))
+        print('Episode: {}'.format(episode),', Timetaken: {:.2f} sec'.format(total_time),', Reward:  {:.2f}'.format(current_ep_reward),', Distance Covered:{} m '.format(info[0]), ', Avg Latency:{:.2f} msec'.format(np.mean(avg_latency)*1000))
 
         with summary_writer.as_default():
 
