@@ -708,7 +708,7 @@ def run():
         total_time = abs((t2-t1).total_seconds())
 
         
-        print('Episode: {}'.format(episode),', Timetaken: {:.2f} sec'.format(total_time),', Reward:  {:.2f}'.format(current_ep_reward),', Distance Covered:{} m '.format(info[0]), ', Avg Latency:{:.2f} msec'.format(np.mean(avg_latency)*1000))
+        print('Episode: {}'.format(episode),', Timetaken: {:.2f} sec'.format(total_time),', Reward:  {:.2f}'.format(current_ep_reward),', Distance Covered: {} m '.format(info[0]), ', Avg Latency: {:.2f} msec'.format(np.mean(avg_latency)*1000))
 
         with summary_writer.as_default():
 
@@ -716,6 +716,14 @@ def run():
             tf.summary.scalar('Metrics/Reward', current_ep_reward, step=episode)
             tf.summary.scalar('Metrics/Distance Covered', info[0], step=episode)
             summary_writer.flush()
+
+        with open(f'{RESULTS_PATH}/PIL_test_results_16bit.csv', mode="a", newline="") as file:
+            writer = csv.writer(file)
+            
+            if file.tell() == 0:
+                writer.writerow(["Episode", "TimeTaken (sec)", "Reward", "Distance Covered (m)", "Avg Latency (msec)","Avg speed (m/sec)"])
+
+            writer.writerow([episode, total_time, current_ep_reward, info[0], np.mean(avg_latency) * 1000 , info[0]/total_time])
 
 
     sys.exit()
