@@ -506,7 +506,7 @@ class Encoder(tf.keras.Model):
         image_obs = self(image_obs, training=False)  
         navigation_obs = tf.convert_to_tensor(observation[1], dtype=tf.float32)
         observation = tf.concat([tf.reshape(tf.cast(image_obs, tf.float32), [-1]),tf.cast(navigation_obs, tf.float32)], axis=-1)
-       
+
         return observation
 
 
@@ -615,12 +615,11 @@ def run():
 
             observation = observation.numpy()
             action = agent(observation).numpy().flatten()
-
+            observation, reward, done, info = env.step(action)
             t4 = datetime.now()
-
+            
             avg_latency.append(abs((t4-t3).total_seconds()))
 
-            observation, reward, done, info = env.step(action)
             t3 = datetime.now()
 
             if observation is None:
@@ -643,7 +642,6 @@ def run():
         distance_covered += info[0]
 
 
-        
         print('Episode: {}'.format(episode),', Timetaken: {:.2f} sec'.format(total_time),', Reward:  {:.2f}'.format(current_ep_reward),', Distance Covered:{} m '.format(info[0]), ', Avg Latency:{:.2f} msec'.format(np.mean(avg_latency)*1000))
 
         with summary_writer.as_default():
