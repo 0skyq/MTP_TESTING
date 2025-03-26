@@ -8,3 +8,4 @@ if gpu_available:
         print("GPU:", gpu)
 else:
     print("CUDA is NOT available. TensorFlow is using the CPU.")
+

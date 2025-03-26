@@ -7,6 +7,7 @@ import pygame
 import time
 import random
 import math
+import csv
 import numpy as np
 from datetime import datetime
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -642,14 +643,25 @@ def run():
         distance_covered += info[0]
 
 
+
         print('Episode: {}'.format(episode),', Timetaken: {:.2f} sec'.format(total_time),', Reward:  {:.2f}'.format(current_ep_reward),', Distance Covered:{} m '.format(info[0]), ', Avg Latency:{:.2f} msec'.format(np.mean(avg_latency)*1000))
 
         with summary_writer.as_default():
 
+            covered_distance = info[0]
             tf.summary.scalar('Test_Metrics/Time Taken', total_time, step=episode)
             tf.summary.scalar('Test_Metrics/Reward', current_ep_reward, step=episode)
-            tf.summary.scalar('Test_Metrics/Distance Covered', info[0], step=episode)
+            tf.summary.scalar('Test_Metrics/Distance Covered', covered_distance, step=episode)
             summary_writer.flush()  
+
+        with open(f'{RESULTS_PATH}/test_results_gpu.csv', mode="a", newline="") as file:
+            writer = csv.writer(file)
+            
+            if file.tell() == 0:
+                writer.writerow(["Episode", "TimeTaken (sec)", "Reward", "Distance Covered (m)", "Avg Latency (msec)","Avg speed (m/sec)"])
+
+            writer.writerow([episode, total_time, current_ep_reward, info[0], np.mean(avg_latency) * 1000 , info[0]/total_time])
+
 
     sys.exit()
 

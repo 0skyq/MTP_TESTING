@@ -14,8 +14,7 @@ import numpy as np
 import pandas as pd
 import logging
 from datetime import datetime
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
+
 
 import tensorflow as tf
 import tensorflow_probability as tfp
@@ -23,6 +22,15 @@ tfd = tfp.distributions
 layers = tf.keras.layers
 
 from parameters import*
+
+gpu_available = tf.config.list_physical_devices('GPU')
+if gpu_available:
+    print("CUDA is available! TensorFlow is using the GPU.")
+    for gpu in gpu_available:
+        print("GPU:", gpu)
+else:
+    print("CUDA is NOT available. TensorFlow is using the CPU.")
+
 
 print()
 
@@ -953,9 +961,11 @@ class PPOAgent(tf.keras.Model):
         self.old_actor = tf.keras.models.load_model(self.models_dir + '/actor')
         self.old_critic = tf.keras.models.load_model(self.models_dir + '/critic')
 
-        log_std_path = os.path.join(self.models_dir, 'log_std.npy')
-        if os.path.exists(log_std_path):
-            self.log_std.assign(np.load(log_std_path))
+        # log_std_path = os.path.join(self.models_dir, 'log_std.npy')
+        # if os.path.exists(log_std_path):
+        #     self.log_std.assign(np.load(log_std_path))
+
+        
 
         print(f"Model is  loaded from {self.models_dir}")
         print()
@@ -972,8 +982,8 @@ class PPOAgent(tf.keras.Model):
         timestep = checkpoint_data['timestep']
         cumulative_score = checkpoint_data['cumulative_score']
         
-        if 'log_std' in checkpoint_data:
-            self.log_std.assign(checkpoint_data['log_std'])
+        # if 'log_std' in checkpoint_data:
+        #     self.log_std.assign(checkpoint_data['log_std'])
 
         print()
         #print(f"Checkpoint loaded from {checkpoint_file} episode : {episode} , log_std = {self.log_std}")
@@ -1361,8 +1371,8 @@ def capture_data():
 if __name__ == "__main__":
 
     try:
-        #train()
-        test()
+        train()
+        #test()
         #capture_data()
 
     except KeyboardInterrupt:
