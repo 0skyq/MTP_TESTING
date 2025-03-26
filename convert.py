@@ -13,7 +13,7 @@ from parameters import*
 
 def representative_data_gen_vae():
     for _ in range(100):
-        dummy_input = tf.random.uniform([1, 160, 8, 3], minval=0.0, maxval=128.0)
+        dummy_input = tf.random.uniform([1, 160, 80, 3], minval=0.0, maxval=128.0)
         yield [dummy_input]
 
 def representative_data_gen_actor():

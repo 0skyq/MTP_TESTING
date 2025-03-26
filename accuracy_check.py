@@ -209,7 +209,7 @@ def accuracy_check_32bit():
         print()
 
 
-        save_csv_dir = os.path.join(RESULTS_PATH,f'accuracy_check_32bit.csv')
+        save_csv_dir = os.path.join(RESULTS_PATH,f'accuracy_check_32bit_gpu.csv')
 
         gpu_time = np.mean(gpu_time)
         cpu_time = np.mean(cpu_time)
@@ -309,7 +309,7 @@ def accuracy_check_16bit():
         print()
 
 
-        save_csv_dir = os.path.join(RESULTS_PATH,f'accuracy_check_16bit.csv')
+        save_csv_dir = os.path.join(RESULTS_PATH,f'accuracy_check_16bit_gpu.csv')
 
         gpu_time = np.mean(gpu_time)
         cpu_time = np.mean(cpu_time)
@@ -364,7 +364,6 @@ def accuracy_check_8bit():
             image_obs = tf.convert_to_tensor(row[0], dtype=tf.float32)
             image_obs = tf.expand_dims(image_obs, axis=0)
 
-            # Quantize input image to uint8
             input_scale, input_zero_point = encoder_input_details[0]['quantization']
             image_obs_uint8 = tf.clip_by_value(image_obs / input_scale + input_zero_point, 0, 255)
             image_obs_uint8 = tf.cast(image_obs_uint8, tf.uint8)
@@ -388,6 +387,7 @@ def accuracy_check_8bit():
             agent.set_tensor(agent_input_details[0]['index'], actor_input_uint8)
             agent.invoke()
             mean = agent.get_tensor(agent_output_details[0]['index'])[0]
+            print(mean)
 
             e_time = time.time()
             pred_mean.append([mean[0], mean[1]])
@@ -401,7 +401,7 @@ def accuracy_check_8bit():
         print(f"MSE: {loss}")
         print(f"RMSE: {rsme}\n")
 
-        save_csv_dir = os.path.join(RESULTS_PATH, f'accuracy_check_8bit.csv')
+        save_csv_dir = os.path.join(RESULTS_PATH, f'accuracy_check_8bit_gpu.csv')
         gpu_time = np.mean(gpu_time)
         cpu_time = np.mean(cpu_time)
 
@@ -420,7 +420,7 @@ def accuracy_check_8bit():
 if __name__ == "__main__":
     try:
         #accuracy_check_32bit()
-        accuracy_check_16bit()
+        #accuracy_check_16bit()
         accuracy_check_8bit()
 
     except KeyboardInterrupt:
