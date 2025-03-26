@@ -330,12 +330,98 @@ def accuracy_check_16bit():
     print(f"Data saved to {save_csv_dir}")
         
 
+def accuracy_check_8bit():
+    np.random.seed(SEED)
+    random.seed(SEED)
+    tf.random.set_seed(SEED)
+
+    encoder = tf.lite.Interpreter(model_path=TF_LITE_PATH + "/var_auto_encoder_model_int8.tflite")
+    encoder.allocate_tensors()
+    encoder_input_details = encoder.get_input_details()
+    encoder_output_details = encoder.get_output_details()
+
+    agent = tf.lite.Interpreter(model_path=TF_LITE_PATH + "/actor_int8.tflite")
+    agent.allocate_tensors()
+    agent_input_details = agent.get_input_details()
+    agent_output_details = agent.get_output_details()
+
+    print(f'INT8 Lite models loaded from {TF_LITE_PATH}')
+    print("Encoder input dtype:", encoder_input_details[0]['dtype'])
+    print("Actor input dtype:", agent_input_details[0]['dtype'])
+
+    for epiosde_id in range(1, NO_OF_TEST_EPISODES):
+        print(f"EPISODE : {epiosde_id}")
+
+        obs, cal_mean, cal_reward, gpu_time = data_processing(epiosde_id)
+        print(f"Sample count: {len(obs)}")
+
+        pred_mean = []
+        cpu_time = []
+
+        for row in obs:
+            s_time = time.time()
+
+            image_obs = tf.convert_to_tensor(row[0], dtype=tf.float32)
+            image_obs = tf.expand_dims(image_obs, axis=0)
+
+            # Quantize input image to uint8
+            input_scale, input_zero_point = encoder_input_details[0]['quantization']
+            image_obs_uint8 = tf.clip_by_value(image_obs / input_scale + input_zero_point, 0, 255)
+            image_obs_uint8 = tf.cast(image_obs_uint8, tf.uint8)
+
+            encoder.set_tensor(encoder_input_details[0]['index'], image_obs_uint8)
+            encoder.invoke()
+            tflite_output = encoder.get_tensor(encoder_output_details[0]['index'])
+
+            # Concatenate encoder output with navigation data (assumed float)
+            observation = tf.concat([
+                tf.reshape(tf.cast(tflite_output, tf.float32), [-1]),
+                tf.cast(row[1], tf.float32)
+            ], axis=-1)
+            observation = tf.expand_dims(observation, axis=0)
+
+            # Quantize actor input
+            actor_input_scale, actor_input_zero_point = agent_input_details[0]['quantization']
+            actor_input_uint8 = tf.clip_by_value(observation / actor_input_scale + actor_input_zero_point, 0, 255)
+            actor_input_uint8 = tf.cast(actor_input_uint8, tf.uint8)
+
+            agent.set_tensor(agent_input_details[0]['index'], actor_input_uint8)
+            agent.invoke()
+            mean = agent.get_tensor(agent_output_details[0]['index'])[0]
+
+            e_time = time.time()
+            pred_mean.append([mean[0], mean[1]])
+            cpu_time.append(e_time - s_time)
+
+        loss = np.mean((np.array(pred_mean) - np.array(cal_mean)) ** 2)
+        rsme = math.sqrt(loss)
+
+        print(f"GPU time (mean): {np.mean(gpu_time)}")
+        print(f"CPU time (mean): {np.mean(cpu_time)}")
+        print(f"MSE: {loss}")
+        print(f"RMSE: {rsme}\n")
+
+        save_csv_dir = os.path.join(RESULTS_PATH, f'accuracy_check_8bit.csv')
+        gpu_time = np.mean(gpu_time)
+        cpu_time = np.mean(cpu_time)
+
+        data_to_append = [f"Episode_{epiosde_id}", gpu_time, cpu_time, loss, rsme]
+
+        with open(save_csv_dir, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            if file.tell() == 0:
+                writer.writerow(["Episode", "GPU Time", "CPU Time", "MSE", "RMSE"])
+            writer.writerow(data_to_append)
+
+    print(f"Data saved to {save_csv_dir}")
+
+
 
 if __name__ == "__main__":
     try:
         #accuracy_check_32bit()
         accuracy_check_16bit()
-
+        accuracy_check_8bit()
 
     except KeyboardInterrupt:
         sys.exit()
