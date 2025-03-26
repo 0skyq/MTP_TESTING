@@ -10,7 +10,16 @@ layers = tf.keras.layers
 
 from parameters import*
 
-DTYPE = tf.float16
+
+def representative_data_gen_vae():
+    for _ in range(100):
+        dummy_input = tf.random.uniform([1, 160, 8, 3], minval=0.0, maxval=128.0)
+        yield [dummy_input]
+
+def representative_data_gen_actor():
+    for _ in range(100):
+        dummy_input = tf.random.uniform([1, 100], minval=-1.0, maxval=1.0) 
+        yield [dummy_input]
 
 
 def convert_tflite():
@@ -21,7 +30,6 @@ def convert_tflite():
 
     models = {
         "actor": os.path.join(PPO_MODEL_PATH, "actor"),
-        "critic": os.path.join(PPO_MODEL_PATH, "critic"),
         "var_auto_encoder_model": os.path.join(VAE_MODEL_PATH, "var_auto_encoder_model")
     }
 
@@ -38,6 +46,28 @@ def convert_tflite():
             f.write(tflite_model)
 
         print(f"Converted model saved at {output_path}")
+
+        # INT8 conversion
+
+        converter_int8 = tf.lite.TFLiteConverter.from_keras_model(model)
+        converter_int8.optimizations = [tf.lite.Optimize.DEFAULT]
+        if model_name == "var_auto_encoder_model":
+            converter_int8.representative_dataset = representative_data_gen_vae
+        elif model_name == "actor":
+            converter_int8.representative_dataset = representative_data_gen_actor
+
+        converter_int8.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+        converter_int8.inference_input_type = tf.uint8
+        converter_int8.inference_output_type = tf.uint8
+        tflite_model_int8 = converter_int8.convert()
+        
+        output_int8 = os.path.join(TF_LITE_PATH, f"{model_name}_int8.tflite")
+        with open(output_int8, "wb") as f:
+            f.write(tflite_model_int8)
+        print(f"INT8 converted model saved at {output_int8}")
+
+
+
 
 
 if __name__ == "__main__":

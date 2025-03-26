@@ -634,6 +634,7 @@ def data_processing(observation):
 
     return data
 
+
 def run():
     
     np.random.seed(SEED)
@@ -691,6 +692,7 @@ def run():
             t3 = datetime.now()
 
             data = data_processing(observation)
+            #181print(data)
 
             client_socket.sendall(data)
 
