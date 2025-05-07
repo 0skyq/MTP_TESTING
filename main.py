@@ -253,6 +253,7 @@ class CarlaEnvironment():
                 throttle = max(min(throttle, 1.0), 0.0) 
                 #throttle = max(min(throttle, 1.0), 0.0)
                 self.vehicle.apply_control(carla.VehicleControl(steer=self.previous_steer*0.9 + steer*0.1, throttle=self.throttle*0.9 + throttle*0.1))
+                #print(f"Action vales : {self.previous_steer*0.9 + steer*0.1},{self.throttle*0.9 + throttle*0.1}")
                 self.previous_steer = steer
                 self.throttle = throttle
 
@@ -554,7 +555,7 @@ class CameraSensorEnv:
     def __init__(self, vehicle):
 
         pygame.init()
-        self.display = pygame.display.set_mode((720, 720),pygame.HWSURFACE | pygame.DOUBLEBUF)
+        self.display = pygame.display.set_mode((500, 500),pygame.HWSURFACE | pygame.DOUBLEBUF)
         self.sensor_name = 'sensor.camera.rgb'
         self.parent = vehicle
         self.surface = None
@@ -568,8 +569,8 @@ class CameraSensorEnv:
     def _set_camera_sensor(self, world):
 
         thrid_person_camera_bp = world.get_blueprint_library().find(self.sensor_name)
-        thrid_person_camera_bp.set_attribute('image_size_x', f'720')
-        thrid_person_camera_bp.set_attribute('image_size_y', f'720')
+        thrid_person_camera_bp.set_attribute('image_size_x', f'500')
+        thrid_person_camera_bp.set_attribute('image_size_y', f'500')
         third_camera = world.spawn_actor(thrid_person_camera_bp, carla.Transform(
             carla.Location(x=-4.0, z=2.0), carla.Rotation(pitch=-12.0)), attach_to=self.parent)
         return third_camera
@@ -1123,7 +1124,7 @@ def train():
                 distance_covered = 0
 
 
-        if episode % 10 == 0:
+        if episode % 5 == 0:
             agent.learn()
 
         if episode % 50 == 0:

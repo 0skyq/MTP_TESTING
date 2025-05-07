@@ -684,6 +684,7 @@ def run():
 
             d = client_socket.recv(8)
             action = struct.unpack('2f',d)
+            action = np.array(action, dtype=np.float32).flatten()
             t4 = datetime.now()
 
             avg_latency.append(abs((t4-t3).total_seconds()))
@@ -718,7 +719,7 @@ def run():
             tf.summary.scalar('Metrics/Distance Covered', info[0], step=episode)
             summary_writer.flush()
 
-        with open(f'{RESULTS_PATH}/PIL_test_results_16bit.csv', mode="a", newline="") as file:
+        with open(f'{RESULTS_PATH}/PIL_test_results.csv', mode="a", newline="") as file:
             writer = csv.writer(file)
             
             if file.tell() == 0:

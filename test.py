@@ -245,6 +245,7 @@ class CarlaEnvironment():
                 throttle = max(min(throttle, 1.0), 0.0) 
                 #throttle = max(min(throttle, 1.0), 0.0)
                 self.vehicle.apply_control(carla.VehicleControl(steer=self.previous_steer*0.9 + steer*0.1, throttle=self.throttle*0.9 + throttle*0.1))
+                print(f"Action vales : {self.previous_steer*0.9 + steer*0.1},{self.throttle*0.9 + throttle*0.1}")
                 self.previous_steer = steer
                 self.throttle = throttle
 
@@ -1342,8 +1343,8 @@ def capture_data():
 if __name__ == "__main__":
 
     try:
-        train()
-        #test()
+        #train()
+        test()
         #capture_data()
 
     except KeyboardInterrupt:
